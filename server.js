@@ -1,32 +1,20 @@
-// ============================================================
-//  TikTok Top 3 Donations — Serveur Railway
-//  Variable d'environnement à définir sur Railway :
-//    TIKTOK_USERNAME = ton_pseudo_tiktok  (sans @)
-// ============================================================
-
-const http                           = require("http");
-const { WebcastPushConnection }      = require("tiktok-live-connector");
-const WebSocket                      = require("ws");
+const http = require("http");
+const { WebcastPushConnection } = require("tiktok-live-connector");
+const WebSocket = require("ws");
 
 const PORT = process.env.PORT || 3000;
-const USERNAME = process.env.TIKTOK_USERNAME;
+const USERNAME = process.env.TIKTOK_USERNAME || "";
 
-if (!USERNAME) {
-  console.error("❌  Variable TIKTOK_USERNAME manquante dans Railway.");
-  process.exit(1);
-}
-
-// ── Serveur HTTP (health-check pour Railway) ──────────────────
+// ── Serveur HTTP + WebSocket sur le même port ─────────────────
 const httpServer = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("TikTok Top3 Donations — OK");
 });
 
-// ── Serveur WebSocket sur le même port ────────────────────────
 const wss = new WebSocket.Server({ server: httpServer });
 
-httpServer.listen(PORT, () => {
-  console.log(`✅  Serveur actif sur le port ${PORT}`);
+httpServer.listen(PORT, "0.0.0.0", () => {
+  console.log("Serveur actif sur le port " + PORT);
 });
 
 function broadcast(data) {
@@ -36,7 +24,7 @@ function broadcast(data) {
   });
 }
 
-// ── Classement en mémoire ─────────────────────────────────────
+// ── Classement ────────────────────────────────────────────────
 const donations = {};
 
 function getTop3() {
@@ -46,48 +34,49 @@ function getTop3() {
     .slice(0, 3);
 }
 
-// ── Connexion TikTok Live ─────────────────────────────────────
+// ── Connexion TikTok ──────────────────────────────────────────
 function connectTikTok() {
+  if (!USERNAME) {
+    console.log("TIKTOK_USERNAME non defini — mode demo actif");
+    return;
+  }
+
   const tiktok = new WebcastPushConnection(USERNAME, {
-    processInitialData  : false,
+    processInitialData: false,
     enableExtendedGiftInfo: true,
     enableWebsocketUpgrade: true,
     requestPollingIntervalMs: 2000,
-    clientParams: { app_language: "fr-FR", device_platform: "web" },
   });
 
   tiktok.connect()
-    .then(() => console.log(`🔴  Connecté au live de @${USERNAME}`))
+    .then(() => console.log("Connecte au live de @" + USERNAME))
     .catch((err) => {
-      console.error("❌  Connexion impossible :", err.message);
-      console.log("⏳  Nouvelle tentative dans 30 s…");
-      setTimeout(connectTikTok, 30_000);
+      console.log("Connexion impossible : " + err.message);
+      console.log("Nouvelle tentative dans 30s...");
+      setTimeout(connectTikTok, 30000);
     });
 
-  // Cadeaux / dons
   tiktok.on("gift", (data) => {
-    if (data.giftType === 1 && !data.repeatEnd) return; // streak pas terminé
-
-    const pseudo = data.uniqueId || data.nickname || "anonyme";
-    const coins  = (data.diamondCount || data.gift?.diamond_count || 1)
-                   * (data.repeatCount || 1);
-
+    if (data.giftType === 1 && !data.repeatEnd) return;
+    const pseudo = data.uniqueId || "anonyme";
+    const coins = (data.diamondCount || 1) * (data.repeatCount || 1);
     donations[pseudo] = (donations[pseudo] || 0) + coins;
-    console.log(`🎁  ${pseudo} → ${coins} coins  (total: ${donations[pseudo]})`);
-
+    console.log(pseudo + " -> " + coins + " coins");
     broadcast({
-      type : "gift",
+      type: "gift",
       donor: { name: pseudo, coins: donations[pseudo] },
-      top3 : getTop3(),
+      top3: getTop3(),
     });
   });
 
   tiktok.on("disconnected", () => {
-    console.log("⚠️  Déconnecté — reconnexion dans 15 s…");
-    setTimeout(connectTikTok, 15_000);
+    console.log("Deconnecte — reconnexion dans 15s...");
+    setTimeout(connectTikTok, 15000);
   });
 
-  tiktok.on("error", (err) => console.error("Erreur TikTok :", err));
+  tiktok.on("error", (err) => {
+    console.log("Erreur : " + err.message);
+  });
 }
 
 connectTikTok();
