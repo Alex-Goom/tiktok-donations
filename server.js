@@ -8,7 +8,7 @@ const http                           = require("http");
 const { WebcastPushConnection }      = require("tiktok-live-connector");
 const WebSocket                      = require("ws");
 
-const PORT     = process.env.PORT     || 8765;
+const PORT = process.env.PORT || 3000;
 const USERNAME = process.env.TIKTOK_USERNAME;
 
 if (!USERNAME) {
