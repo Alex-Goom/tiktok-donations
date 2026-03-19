@@ -1,0 +1,16 @@
+{
+  "name": "tiktok-top3-donations",
+  "version": "1.0.0",
+  "description": "Top 3 donations TikTok Live – serveur Railway",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "tiktok-live-connector": "^1.2.5",
+    "ws": "^8.16.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

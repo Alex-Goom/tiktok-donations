@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Top 3 Donations – TikTok Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  body{
+    background:transparent;
+    display:flex;justify-content:center;align-items:flex-start;
+    min-height:100vh;padding:20px;
+    font-family:'Nunito',sans-serif;
+  }
+
+  .panel{
+    width:420px;background:#0d0d0d;border-radius:22px;
+    padding:22px 18px 20px;color:#fff;overflow:hidden;position:relative;
+  }
+  .panel::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,#fe2c55,#25f4ee,#fe2c55);
+    background-size:200% 100%;animation:slidebar 3s linear infinite;
+  }
+  @keyframes slidebar{0%{background-position:0%}100%{background-position:200%}}
+
+  .header{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:20px}
+  .tiktok-icon{width:30px;height:30px;background:#fe2c55;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px}
+  .title{font-family:'Bebas Neue',Impact,sans-serif;font-size:28px;letter-spacing:3px}
+  .live-badge{display:flex;align-items:center;gap:5px;background:#fe2c5520;border:1px solid #fe2c5545;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#fe2c55;letter-spacing:1px}
+  .live-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:#fe2c55;animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+
+  .podium{display:flex;gap:10px;align-items:flex-end;margin-bottom:16px}
+  .card{flex:1;border-radius:16px;padding:14px 10px;text-align:center;position:relative;transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
+  .card.r1{background:linear-gradient(160deg,#1a1400,#2a1e00);border:1px solid #ffd70045;min-height:190px;order:2}
+  .card.r2{background:linear-gradient(160deg,#0d0d14,#161630);border:1px solid #c0c0c040;min-height:158px;order:1}
+  .card.r3{background:linear-gradient(160deg,#130d06,#1e1409);border:1px solid #cd7f3240;min-height:145px;order:3}
+  .card.pop{animation:pop .55s cubic-bezier(.34,1.56,.64,1)}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.1)}100%{transform:scale(1)}}
+
+  .crown{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:24px;filter:drop-shadow(0 2px 6px #0008)}
+  .avatar{width:48px;height:48px;border-radius:50%;margin:10px auto 8px;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900}
+  .r1 .avatar{background:linear-gradient(135deg,#ffd700,#ff8c00);color:#3d2600}
+  .r2 .avatar{background:linear-gradient(135deg,#c0c0c0,#808080);color:#1a1a1a}
+  .r3 .avatar{background:linear-gradient(135deg,#cd7f32,#8b4513);color:#2d1200}
+
+  .dname{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+  .r1 .dname{font-size:14px}
+  .dcoins{font-family:'Bebas Neue',Impact,sans-serif;letter-spacing:1px;transition:all .3s}
+  .r1 .dcoins{font-size:27px;color:#ffd700}
+  .r2 .dcoins{font-size:22px;color:#c0c0c0}
+  .r3 .dcoins{font-size:20px;color:#cd7f32}
+  .dsub{font-size:11px;color:#ffffff50;margin-top:2px}
+
+  .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:110px;gap:6px;color:#ffffff25;font-size:11px;font-weight:700;letter-spacing:1px}
+  .empty-ico{font-size:26px;opacity:.25}
+
+  /* ── Config box (masquée en prod) ── */
+  .config{background:#181818;border:1px solid #ffffff12;border-radius:14px;padding:14px 16px;margin-bottom:14px}
+  .config-title{font-size:10px;font-weight:700;letter-spacing:2px;color:#ffffff40;margin-bottom:10px;text-transform:uppercase}
+  .config-row{display:flex;gap:8px;align-items:center}
+  .inp{background:#0d0d0d;border:1px solid #ffffff20;border-radius:10px;color:#fff;font-family:'Nunito',sans-serif;font-size:13px;padding:8px 12px;outline:none;flex:1;transition:border-color .2s}
+  .inp:focus{border-color:#25f4ee}
+  .inp::placeholder{color:#ffffff30}
+  .btn{background:#25f4ee20;border:1px solid #25f4ee40;border-radius:10px;color:#25f4ee;font-family:'Nunito',sans-serif;font-size:12px;font-weight:900;padding:8px 14px;cursor:pointer;transition:opacity .2s;white-space:nowrap}
+  .btn:hover{opacity:.8}
+
+  .status{text-align:center;font-size:11px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:10px;transition:all .4s;background:#ffffff08;color:#ffffff40}
+  .status.ok{background:#25f4ee15;color:#25f4ee}
+  .status.err{background:#fe2c5515;color:#fe2c55}
+
+  .confetti-wrap{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;overflow:hidden;border-radius:22px}
+  .cf{position:absolute;width:8px;height:8px;border-radius:2px;animation:cffall 1.3s ease-out forwards}
+  @keyframes cffall{0%{transform:translateY(-20px) rotate(0deg);opacity:1}100%{transform:translateY(140px) rotate(380deg);opacity:0}}
+
+  .toast{position:absolute;top:62px;left:50%;transform:translateX(-50%) translateY(-8px);background:#25f4ee;color:#0d0d0d;font-weight:900;font-size:12px;border-radius:20px;padding:5px 16px;opacity:0;transition:all .3s;white-space:nowrap;z-index:10;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="panel" id="panel">
+  <div class="confetti-wrap" id="confetti"></div>
+  <div class="toast" id="toast"></div>
+
+  <div class="header">
+    <div class="tiktok-icon">♪</div>
+    <div class="title">TOP 3 DONATIONS</div>
+    <div class="live-badge">LIVE</div>
+  </div>
+
+  <!-- ⬇️ Colle ici ton URL Railway (wss://…) puis clique Connecter -->
+  <div class="config" id="cfg">
+    <div class="config-title">🔌 URL Railway WebSocket</div>
+    <div class="config-row">
+      <input class="inp" id="wsurl" placeholder="wss://ton-app.railway.app" />
+      <button class="btn" onclick="connect()">Connecter</button>
+    </div>
+  </div>
+
+  <div class="podium" id="podium"></div>
+  <div class="status" id="status">En attente de connexion…</div>
+</div>
+
+<script>
+  const RANKS=[{cls:'r1',icon:'👑'},{cls:'r2',icon:'🥈'},{cls:'r3',icon:'🥉'}];
+  let top3=[], ws=null;
+
+  // Sauvegarde l'URL dans localStorage
+  const saved = localStorage.getItem('railway_ws');
+  if(saved) document.getElementById('wsurl').value = saved;
+
+  function initials(n){ return n.replace(/^@/,'').substring(0,2).toUpperCase(); }
+  function fmt(n){ return n>=1000?(n/1000).toFixed(1)+'k':n; }
+
+  function render(bumped){
+    const p=document.getElementById('podium');
+    p.innerHTML='';
+    for(let i=0;i<3;i++){
+      const r=RANKS[i], d=top3[i];
+      const card=document.createElement('div');
+      card.className='card '+r.cls;
+      if(bumped&&d&&d.name===bumped) card.classList.add('pop');
+      if(d){
+        card.innerHTML=`
+          <div class="crown">${r.icon}</div>
+          <div class="avatar">${initials(d.name)}</div>
+          <div class="dname">@${d.name.replace(/^@/,'')}</div>
+          <div class="dcoins">🪙 ${fmt(d.coins)}</div>
+          <div class="dsub">${d.coins.toLocaleString()} coins</div>`;
+      } else {
+        card.innerHTML=`
+          <div class="crown" style="opacity:.25">${r.icon}</div>
+          <div class="empty"><div class="empty-ico">🪙</div>#${i+1} — en attente</div>`;
+      }
+      p.appendChild(card);
+    }
+  }
+
+  function confetti(){
+    const c=document.getElementById('confetti');
+    const cols=['#fe2c55','#25f4ee','#ffd700','#ff8c00','#fff'];
+    for(let i=0;i<20;i++){
+      const el=document.createElement('div');
+      el.className='cf';
+      el.style.background=cols[Math.random()*cols.length|0];
+      el.style.left=(15+Math.random()*70)+'%';
+      el.style.top=(Math.random()*30)+'%';
+      el.style.animationDelay=(Math.random()*.5)+'s';
+      el.style.width=el.style.height=(6+Math.random()*6)+'px';
+      c.appendChild(el);
+      setTimeout(()=>el.remove(),1800);
+    }
+  }
+
+  function toast(msg){
+    const t=document.getElementById('toast');
+    t.textContent=msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'),2400);
+  }
+
+  function setStatus(txt,type){
+    const s=document.getElementById('status');
+    s.textContent=txt; s.className='status'+(type?' '+type:'');
+  }
+
+  function connect(){
+    const url=document.getElementById('wsurl').value.trim();
+    if(!url){ alert('Colle ton URL Railway (wss://…)'); return; }
+    localStorage.setItem('railway_ws', url);
+    if(ws) ws.close();
+
+    setStatus('Connexion en cours…','');
+    ws=new WebSocket(url);
+
+    ws.onopen=()=>{
+      setStatus('🔴  Connecté au live TikTok','ok');
+      document.getElementById('cfg').style.display='none';
+    };
+
+    ws.onmessage=(e)=>{
+      const msg=JSON.parse(e.data);
+      if(msg.type==='gift'){
+        const wasFirst=top3.length===0;
+        top3=msg.top3;
+        render(msg.donor.name);
+        confetti();
+        if(wasFirst||top3[0]?.name===msg.donor.name)
+          toast(`👑 @${msg.donor.name} passe N°1 !`);
+        else
+          toast(`🎁 @${msg.donor.name} — ${fmt(msg.donor.coins)} 🪙`);
+      }
+    };
+
+    ws.onerror=()=>setStatus('❌  URL incorrecte ou serveur injoignable','err');
+    ws.onclose=()=>{
+      setStatus('⚠️  Déconnecté — reconnexion dans 5 s…','err');
+      setTimeout(connect,5000);
+    };
+  }
+
+  // Connexion auto si URL déjà sauvegardée
+  if(saved) connect();
+
+  render();
+</script>
+</body>
+</html>
