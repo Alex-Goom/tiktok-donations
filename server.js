@@ -5,10 +5,17 @@ const WebSocket = require("ws");
 const PORT = process.env.PORT || 3000;
 const USERNAME = process.env.TIKTOK_USERNAME || "";
 
-// ── Serveur HTTP + WebSocket sur le même port ─────────────────
 const httpServer = http.createServer((req, res) => {
+  if (req.method === "POST" && req.url === "/reset") {
+    Object.keys(donations).forEach(k => delete donations[k]);
+    Object.keys(avatars).forEach(k => delete avatars[k]);
+    broadcast({ type: "reset" });
+    res.writeHead(200); res.end("reset ok");
+    console.log("Classement remis a zero");
+    return;
+  }
   res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end("TikTok Top3 Donations — OK");
+  res.end("TikTok Top3 — OK");
 });
 
 const wss = new WebSocket.Server({ server: httpServer });
@@ -24,20 +31,19 @@ function broadcast(data) {
   });
 }
 
-// ── Classement ────────────────────────────────────────────────
 const donations = {};
+const avatars = {};
 
 function getTop3() {
   return Object.entries(donations)
-    .map(([name, coins]) => ({ name, coins }))
+    .map(([name, coins]) => ({ name, coins, avatar: avatars[name] || null }))
     .sort((a, b) => b.coins - a.coins)
     .slice(0, 3);
 }
 
-// ── Connexion TikTok ──────────────────────────────────────────
 function connectTikTok() {
   if (!USERNAME) {
-    console.log("TIKTOK_USERNAME non defini — mode demo actif");
+    console.log("TIKTOK_USERNAME non defini — serveur pret");
     return;
   }
 
@@ -52,7 +58,6 @@ function connectTikTok() {
     .then(() => console.log("Connecte au live de @" + USERNAME))
     .catch((err) => {
       console.log("Connexion impossible : " + err.message);
-      console.log("Nouvelle tentative dans 30s...");
       setTimeout(connectTikTok, 30000);
     });
 
@@ -61,10 +66,15 @@ function connectTikTok() {
     const pseudo = data.uniqueId || "anonyme";
     const coins = (data.diamondCount || 1) * (data.repeatCount || 1);
     donations[pseudo] = (donations[pseudo] || 0) + coins;
-    console.log(pseudo + " -> " + coins + " coins");
+
+    if (data.profilePictureUrl && !avatars[pseudo]) {
+      avatars[pseudo] = data.profilePictureUrl;
+    }
+
+    console.log(pseudo + " -> " + coins + " coins (total: " + donations[pseudo] + ")");
     broadcast({
       type: "gift",
-      donor: { name: pseudo, coins: donations[pseudo] },
+      donor: { name: pseudo, coins: donations[pseudo], avatar: avatars[pseudo] || null },
       top3: getTop3(),
     });
   });
@@ -74,9 +84,7 @@ function connectTikTok() {
     setTimeout(connectTikTok, 15000);
   });
 
-  tiktok.on("error", (err) => {
-    console.log("Erreur : " + err.message);
-  });
+  tiktok.on("error", (err) => console.log("Erreur : " + err.message));
 }
 
 connectTikTok();
