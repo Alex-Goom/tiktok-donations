@@ -6,14 +6,6 @@ const PORT = process.env.PORT || 3000;
 const USERNAME = process.env.TIKTOK_USERNAME || "";
 
 const httpServer = http.createServer((req, res) => {
-  if (req.method === "POST" && req.url === "/reset") {
-    Object.keys(donations).forEach(k => delete donations[k]);
-    Object.keys(avatars).forEach(k => delete avatars[k]);
-    broadcast({ type: "reset" });
-    res.writeHead(200); res.end("reset ok");
-    console.log("Classement remis a zero");
-    return;
-  }
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("TikTok Top3 — OK");
 });
@@ -41,6 +33,20 @@ function getTop3() {
     .slice(0, 3);
 }
 
+wss.on("connection", (socket) => {
+  socket.on("message", (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg.type === "reset") {
+        Object.keys(donations).forEach(k => delete donations[k]);
+        Object.keys(avatars).forEach(k => delete avatars[k]);
+        broadcast({ type: "reset" });
+        console.log("Classement remis a zero");
+      }
+    } catch(e) {}
+  });
+});
+
 function connectTikTok() {
   if (!USERNAME) {
     console.log("TIKTOK_USERNAME non defini — serveur pret");
@@ -66,11 +72,9 @@ function connectTikTok() {
     const pseudo = data.uniqueId || "anonyme";
     const coins = (data.diamondCount || 1) * (data.repeatCount || 1);
     donations[pseudo] = (donations[pseudo] || 0) + coins;
-
     if (data.profilePictureUrl && !avatars[pseudo]) {
       avatars[pseudo] = data.profilePictureUrl;
     }
-
     console.log(pseudo + " -> " + coins + " coins (total: " + donations[pseudo] + ")");
     broadcast({
       type: "gift",
