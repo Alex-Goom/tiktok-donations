@@ -15,22 +15,25 @@ async function redisGet(key) {
       headers: { Authorization: "Bearer " + REDIS_TOKEN }
     });
     const j = await r.json();
-    console.log("Redis GET " + key + " =", JSON.stringify(j));
-    if (j.result && j.result !== null) return JSON.parse(j.result);
-    return null;
+    if (!j.result) return null;
+    let data = j.result;
+    // Dé-encoder si double encodage
+    if (typeof data === "string") data = JSON.parse(data);
+    if (data && typeof data.value === "string") data = JSON.parse(data.value);
+    console.log("Redis chargé pour @" + key + " — OK");
+    return data;
   } catch(e) { console.log("Redis GET error: " + e.message); return null; }
 }
 
 async function redisSet(key, value) {
   try {
-    const val = JSON.stringify(value);
-    const r = await fetch(REDIS_URL + "/set/" + key + "?EX=2592000", {
+    const r = await fetch(REDIS_URL + "/set/" + key, {
       method: "POST",
       headers: { Authorization: "Bearer " + REDIS_TOKEN, "Content-Type": "application/json" },
-      body: JSON.stringify({ value: val })
+      body: JSON.stringify([key, JSON.stringify(value)])
     });
     const j = await r.json();
-    console.log("Redis SET " + key + " =", JSON.stringify(j));
+    if (j.error) console.log("Redis SET error: " + j.error);
   } catch(e) { console.log("Redis SET error: " + e.message); }
 }
 
