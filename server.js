@@ -11,26 +11,24 @@ const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAATwjAAIncDJ
 // ── Redis helpers (Upstash REST API) ─────────────────────────
 async function redisGet(key) {
   try {
-    const r = await fetch(REDIS_URL + "/get/" + key, {
+    const r = await fetch(REDIS_URL + "/get/" + encodeURIComponent(key), {
       headers: { Authorization: "Bearer " + REDIS_TOKEN }
     });
     const j = await r.json();
     if (!j.result) return null;
     let data = j.result;
-    // Dé-encoder si double encodage
     if (typeof data === "string") data = JSON.parse(data);
     if (data && typeof data.value === "string") data = JSON.parse(data.value);
-    console.log("Redis chargé pour @" + key + " — OK");
     return data;
   } catch(e) { console.log("Redis GET error: " + e.message); return null; }
 }
 
 async function redisSet(key, value) {
   try {
-    const r = await fetch(REDIS_URL + "/set/" + key, {
+    const r = await fetch(REDIS_URL + "/set/" + encodeURIComponent(key), {
       method: "POST",
       headers: { Authorization: "Bearer " + REDIS_TOKEN, "Content-Type": "application/json" },
-      body: JSON.stringify([key, JSON.stringify(value)])
+      body: JSON.stringify({ value: JSON.stringify(value) })
     });
     const j = await r.json();
     if (j.error) console.log("Redis SET error: " + j.error);
@@ -39,7 +37,7 @@ async function redisSet(key, value) {
 
 async function redisDel(key) {
   try {
-    await fetch(REDIS_URL + "/del/" + key, {
+    await fetch(REDIS_URL + "/del/" + encodeURIComponent(key), {
       method: "POST",
       headers: { Authorization: "Bearer " + REDIS_TOKEN }
     });
