@@ -122,11 +122,16 @@ wss.on("connection", socket => {
 
       if (msg.type === "join" && msg.username) {
         socket.room = msg.username;
-        await getRoom(msg.username);
-        socket.send(JSON.stringify({
-          type: "sync",
-          top3: getTop3(msg.username)
-        }));
+        getRoom(msg.username).then(function() {
+          setTimeout(function() {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: "sync",
+                top3: getTop3(msg.username)
+              }));
+            }
+          }, 500);
+        });
         console.log("Panel rejoint: @" + msg.username);
       }
 
