@@ -56,18 +56,29 @@ httpServer.listen(PORT, "0.0.0.0", () => {
 // ── Rooms en mémoire ──────────────────────────────────────────
 const rooms = {};
 
+const loadingRooms = {};
+
 async function getRoom(username) {
-  if (!rooms[username]) {
-    rooms[username] = { donations: {}, avatars: {}, tiktok: null };
-    // Charger depuis Redis
-    const saved = await redisGet("room:" + username);
-    if (saved) {
-      rooms[username].donations = saved.donations || {};
-      rooms[username].avatars   = saved.avatars   || {};
-      console.log("Données chargées depuis Redis pour @" + username);
-    }
-    connectTikTok(username);
+  if (rooms[username]) return rooms[username];
+
+  if (loadingRooms[username]) {
+    await loadingRooms[username];
+    return rooms[username];
   }
+
+  let resolve;
+  loadingRooms[username] = new Promise(r => { resolve = r; });
+
+  rooms[username] = { donations: {}, avatars: {}, tiktok: null };
+  const saved = await redisGet("room:" + username);
+  if (saved) {
+    rooms[username].donations = saved.donations || {};
+    rooms[username].avatars   = saved.avatars   || {};
+    console.log("Données chargées depuis Redis pour @" + username);
+  }
+  connectTikTok(username);
+  resolve();
+  delete loadingRooms[username];
   return rooms[username];
 }
 
