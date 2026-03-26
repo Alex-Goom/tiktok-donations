@@ -11,31 +11,33 @@ const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAATwjAAIncDJ
 // ── Redis helpers (Upstash REST API) ─────────────────────────
 async function redisGet(key) {
   try {
-    const r = await fetch(REDIS_URL + "/get/" + encodeURIComponent(key), {
+    const r = await fetch(REDIS_URL + "/get/" + encodeURIComponent(key).replace(/\./g, "%2E"), {
       headers: { Authorization: "Bearer " + REDIS_TOKEN }
     });
     const j = await r.json();
     return j.result ? JSON.parse(j.result) : null;
-  } catch(e) { return null; }
+  } catch(e) { console.log("Redis GET error:", e.message); return null; }
 }
 
 async function redisSet(key, value) {
   try {
-    await fetch(REDIS_URL + "/set/" + encodeURIComponent(key), {
+    const safeKey = encodeURIComponent(key).replace(/\./g, "%2E");
+    await fetch(REDIS_URL + "/set/" + safeKey, {
       method: "POST",
       headers: { Authorization: "Bearer " + REDIS_TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify({ value: JSON.stringify(value) })
     });
-  } catch(e) {}
+  } catch(e) { console.log("Redis SET error:", e.message); }
 }
 
 async function redisDel(key) {
   try {
-    await fetch(REDIS_URL + "/del/" + encodeURIComponent(key), {
+    const safeKey = encodeURIComponent(key).replace(/\./g, "%2E");
+    await fetch(REDIS_URL + "/del/" + safeKey, {
       method: "POST",
       headers: { Authorization: "Bearer " + REDIS_TOKEN }
     });
-  } catch(e) {}
+  } catch(e) { console.log("Redis DEL error:", e.message); }
 }
 
 // ── Serveur HTTP + WebSocket ──────────────────────────────────
@@ -147,6 +149,17 @@ function connectTikTok(username) {
     enableExtendedGiftInfo: true,
     enableWebsocketUpgrade: true,
     requestPollingIntervalMs: 2000,
+    clientParams: {
+      app_language: "fr-FR",
+      device_platform: "web",
+    },
+    sessionId: "",
+    enableCookies: false,
+    requestOptions: {
+      params: {
+        uniqueId: username,
+      }
+    }
   });
 
   r.tiktok = tiktok;
