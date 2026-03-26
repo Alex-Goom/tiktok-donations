@@ -4,8 +4,8 @@ const WebSocket = require("ws");
 
 const PORT         = process.env.PORT         || 3000;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin123";
-const REDIS_URL    = process.env.UPSTASH_REDIS_REST_URL   || "https://cool-warthog-80931.upstash.io";
-const REDIS_TOKEN  = process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAATwjAAIncDJhN2NhYTA4NjE4MGI0MGY1YTJlN2Q5ZDkxMWE5NzVhYnAyODA5MzE";
+const REDIS_URL    = process.env.UPSTASH_REDIS_REST_URL   || "https://lenient-leopard-36946.upstash.io";
+const REDIS_TOKEN  = process.env.UPSTASH_REDIS_REST_TOKEN || "AZBSAAIncDE3MjZjOThhMTI2ZDY0NjE4YTVjMTI5NjQ1OWYwZjdjMHAxMzY5NDY";
 
 async function redisGet(key) {
   try {
