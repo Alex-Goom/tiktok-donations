@@ -9,34 +9,34 @@ const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL   || "https://cool-wartho
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || "gQAAAAAAATwjAAIncDJhN2NhYTA4NjE4MGI0MGY1YTJlN2Q5ZDkxMWE5NzVhYnAyODA5MzE";
 
 // ── Redis helpers (Upstash REST API) ─────────────────────────
-async function redisGet(key) {
+async function redisCmd(args) {
   try {
-    const r = await fetch(REDIS_URL + "/get/" + encodeURIComponent(key).replace(/\./g, "%2E"), {
-      headers: { Authorization: "Bearer " + REDIS_TOKEN }
+    const r = await fetch(REDIS_URL, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + REDIS_TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify(args)
     });
     const j = await r.json();
-    return j.result ? JSON.parse(j.result) : null;
+    return j.result !== undefined ? j.result : null;
+  } catch(e) { console.log("Redis error:", e.message); return null; }
+}
+
+async function redisGet(key) {
+  try {
+    const result = await redisCmd(["GET", key]);
+    return result ? JSON.parse(result) : null;
   } catch(e) { console.log("Redis GET error:", e.message); return null; }
 }
 
 async function redisSet(key, value) {
   try {
-    const safeKey = encodeURIComponent(key).replace(/\./g, "%2E");
-    await fetch(REDIS_URL + "/set/" + safeKey, {
-      method: "POST",
-      headers: { Authorization: "Bearer " + REDIS_TOKEN, "Content-Type": "application/json" },
-      body: JSON.stringify({ value: JSON.stringify(value) })
-    });
+    await redisCmd(["SET", key, JSON.stringify(value)]);
   } catch(e) { console.log("Redis SET error:", e.message); }
 }
 
 async function redisDel(key) {
   try {
-    const safeKey = encodeURIComponent(key).replace(/\./g, "%2E");
-    await fetch(REDIS_URL + "/del/" + safeKey, {
-      method: "POST",
-      headers: { Authorization: "Bearer " + REDIS_TOKEN }
-    });
+    await redisCmd(["DEL", key]);
   } catch(e) { console.log("Redis DEL error:", e.message); }
 }
 
