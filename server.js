@@ -123,6 +123,10 @@ wss.on("connection", socket => {
       if (msg.type === "reset" && msg.secret === ADMIN_SECRET && msg.username) {
         await resetRoom(msg.username);
       }
+      if (msg.type === "opacity" && msg.secret === ADMIN_SECRET && msg.username) {
+        broadcastRoom(msg.username, { type: "opacity", value: msg.value });
+        console.log("Opacité @" + msg.username + " => " + msg.value);
+      }
     } catch(e) {}
   });
   socket.on("error", () => {});
