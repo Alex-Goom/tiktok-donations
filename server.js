@@ -116,6 +116,8 @@ wss.on("connection", socket => {
         setTimeout(function() {
           if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: "sync", top3: getTop3(msg.username) }));
+            var op = rooms[msg.username] && rooms[msg.username].opacity;
+            if (op !== undefined) socket.send(JSON.stringify({ type: "opacity", value: op }));
           }
         }, 300);
         console.log("Panel rejoint: @" + msg.username);
@@ -124,6 +126,8 @@ wss.on("connection", socket => {
         await resetRoom(msg.username);
       }
       if (msg.type === "opacity" && msg.secret === ADMIN_SECRET && msg.username) {
+        if (!rooms[msg.username]) rooms[msg.username] = { donations: {}, avatars: {}, tiktok: null };
+        rooms[msg.username].opacity = msg.value;
         broadcastRoom(msg.username, { type: "opacity", value: msg.value });
         console.log("Opacité @" + msg.username + " => " + msg.value);
       }
