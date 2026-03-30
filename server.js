@@ -58,16 +58,25 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   console.log("Serveur actif port " + PORT);
 });
 
-// ── Rooms — clé = "period:username" ex: "month:trycom9.3" ou "week:trycom9.3"
+// rooms: clé = "month:username" ou "week:username"
 const rooms = {};
+
+// tiktok connections: clé = username
+const tiktokConnections = {};
 
 function roomKey(username, period) {
   return (period || "month") + ":" + username;
 }
 
+function getUsernameFromKey(key) {
+  var parts = key.split(":");
+  parts.shift(); // enlève "month" ou "week"
+  return parts.join(":");
+}
+
 async function getRoom(key, username) {
   if (rooms[key]) return rooms[key];
-  rooms[key] = { donations: {}, avatars: {}, opacity: 0.45, tiktok: null };
+  rooms[key] = { donations: {}, avatars: {}, opacity: 0.45 };
   try {
     const saved = await redisGet("room:" + key);
     if (saved && saved.donations) {
@@ -77,11 +86,10 @@ async function getRoom(key, username) {
       console.log("Redis chargé [" + key + "] — " + Object.keys(saved.donations).length + " joueurs");
     }
   } catch(e) { console.log("Erreur Redis [" + key + "]: " + e.message); }
-  // Connecter TikTok seulement si pas déjà connecté pour cet username
-  var alreadyConnected = Object.keys(rooms).some(function(k) {
-    return k !== key && k.split(":")[1] === username && rooms[k].tiktok && rooms[k].tiktok._isConnected;
-  });
-  if (!alreadyConnected) connectTikTok(username);
+
+  if (!tiktokConnections[username]) {
+    connectTikTok(username);
+  }
   return rooms[key];
 }
 
@@ -143,7 +151,7 @@ wss.on("connection", socket => {
 
       if (msg.type === "opacity" && msg.secret === ADMIN_SECRET && msg.username) {
         const key = roomKey(msg.username, msg.period || "month");
-        if (!rooms[key]) rooms[key] = { donations: {}, avatars: {}, opacity: msg.value, tiktok: null };
+        if (!rooms[key]) rooms[key] = { donations: {}, avatars: {}, opacity: msg.value };
         rooms[key].opacity = msg.value;
         await saveRoom(key);
         broadcastKey(key, { type: "opacity", value: msg.value });
@@ -155,7 +163,6 @@ wss.on("connection", socket => {
   socket.on("error", () => {});
 });
 
-// ── TikTok — broadcast vers TOUTES les rooms de cet username
 function connectTikTok(username) {
   const tiktok = new WebcastPushConnection(username, {
     processInitialData    : false,
@@ -164,15 +171,18 @@ function connectTikTok(username) {
     requestPollingIntervalMs: 2000,
   });
 
+  tiktokConnections[username] = tiktok;
+
   tiktok.connect()
     .then(() => {
       console.log("Connecte @" + username);
       Object.keys(rooms).forEach(function(k) {
-        if (k.split(":")[1] === username) broadcastKey(k, { type: "status", online: true });
+        if (getUsernameFromKey(k) === username) broadcastKey(k, { type: "status", online: true });
       });
     })
     .catch(err => {
       console.log("Erreur @" + username + ": " + err.message + " — retry 30s");
+      delete tiktokConnections[username];
       setTimeout(() => connectTikTok(username), 30000);
     });
 
@@ -181,9 +191,8 @@ function connectTikTok(username) {
     const pseudo = data.uniqueId || "anonyme";
     const coins  = (data.diamondCount || 1) * (data.repeatCount || 1);
 
-    // Mettre à jour TOUTES les rooms de cet username (month + week)
     for (var key of Object.keys(rooms)) {
-      if (key.split(":")[1] !== username) continue;
+      if (getUsernameFromKey(key) !== username) continue;
       const r = rooms[key];
       r.donations[pseudo] = (r.donations[pseudo] || 0) + coins;
       if (data.profilePictureUrl && !r.avatars[pseudo]) r.avatars[pseudo] = data.profilePictureUrl;
@@ -199,6 +208,7 @@ function connectTikTok(username) {
 
   tiktok.on("disconnected", () => {
     console.log("Deconnecte @" + username + " retry 15s");
+    delete tiktokConnections[username];
     setTimeout(() => connectTikTok(username), 15000);
   });
 
