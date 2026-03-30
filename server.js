@@ -58,7 +58,15 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   console.log("Serveur actif port " + PORT);
 });
 
-// rooms: clé = "month:username" ou "week:username"
+// Sauvegarde différée — max 1 fois toutes les 30s par room
+const saveTimers = {};
+function debouncedSave(key) {
+  if (saveTimers[key]) return;
+  saveTimers[key] = setTimeout(async function() {
+    delete saveTimers[key];
+    await saveRoom(key);
+  }, 30000);
+}
 const rooms = {};
 
 // tiktok connections: clé = username
