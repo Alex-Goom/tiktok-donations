@@ -58,31 +58,41 @@ httpServer.listen(PORT, "0.0.0.0", () => {
   console.log("Serveur actif port " + PORT);
 });
 
+// ── Rooms — clé = "period:username" ex: "month:trycom9.3" ou "week:trycom9.3"
 const rooms = {};
 
-async function getRoom(username) {
-  if (rooms[username]) return rooms[username];
-  rooms[username] = { donations: {}, avatars: {}, tiktok: null };
+function roomKey(username, period) {
+  return (period || "month") + ":" + username;
+}
+
+async function getRoom(key, username) {
+  if (rooms[key]) return rooms[key];
+  rooms[key] = { donations: {}, avatars: {}, opacity: 0.45, tiktok: null };
   try {
-    const saved = await redisGet("room:" + username);
+    const saved = await redisGet("room:" + key);
     if (saved && saved.donations) {
-      rooms[username].donations = saved.donations;
-      rooms[username].avatars   = saved.avatars || {};
-      console.log("Redis chargé pour @" + username + " — " + Object.keys(saved.donations).length + " joueurs");
+      rooms[key].donations = saved.donations;
+      rooms[key].avatars   = saved.avatars || {};
+      if (saved.opacity !== undefined) rooms[key].opacity = saved.opacity;
+      console.log("Redis chargé [" + key + "] — " + Object.keys(saved.donations).length + " joueurs");
     }
-  } catch(e) { console.log("Erreur Redis pour @" + username + ": " + e.message); }
-  connectTikTok(username);
-  return rooms[username];
+  } catch(e) { console.log("Erreur Redis [" + key + "]: " + e.message); }
+  // Connecter TikTok seulement si pas déjà connecté pour cet username
+  var alreadyConnected = Object.keys(rooms).some(function(k) {
+    return k !== key && k.split(":")[1] === username && rooms[k].tiktok && rooms[k].tiktok._isConnected;
+  });
+  if (!alreadyConnected) connectTikTok(username);
+  return rooms[key];
 }
 
-async function saveRoom(username) {
-  const r = rooms[username];
+async function saveRoom(key) {
+  const r = rooms[key];
   if (!r) return;
-  await redisSet("room:" + username, { donations: r.donations, avatars: r.avatars });
+  await redisSet("room:" + key, { donations: r.donations, avatars: r.avatars, opacity: r.opacity });
 }
 
-function getTop3(username) {
-  const r = rooms[username];
+function getTop3(key) {
+  const r = rooms[key];
   if (!r) return [];
   return Object.entries(r.donations)
     .map(([name, coins]) => ({ name, coins, avatar: r.avatars[name] || null }))
@@ -90,79 +100,107 @@ function getTop3(username) {
     .slice(0, 3);
 }
 
-function broadcastRoom(username, data) {
+function broadcastKey(key, data) {
   const msg = JSON.stringify(data);
   wss.clients.forEach(c => {
-    if (c.readyState === WebSocket.OPEN && c.room === username) c.send(msg);
+    if (c.readyState === WebSocket.OPEN && c.roomKey === key) c.send(msg);
   });
 }
 
-async function resetRoom(username) {
-  const r = rooms[username];
+async function resetRoom(key) {
+  const r = rooms[key];
   if (r) { r.donations = {}; r.avatars = {}; }
-  await redisDel("room:" + username);
-  broadcastRoom(username, { type: "reset" });
-  console.log("Reset @" + username);
+  await redisDel("room:" + key);
+  broadcastKey(key, { type: "reset" });
+  console.log("Reset [" + key + "]");
 }
 
 wss.on("connection", socket => {
-  socket.room = null;
+  socket.roomKey = null;
   socket.on("message", async raw => {
     try {
       const msg = JSON.parse(raw);
+
       if (msg.type === "join" && msg.username) {
-        socket.room = msg.username;
-        await getRoom(msg.username);
+        const period = msg.period || "month";
+        const key = roomKey(msg.username, period);
+        socket.roomKey = key;
+        await getRoom(key, msg.username);
         setTimeout(function() {
           if (socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: "sync", top3: getTop3(msg.username) }));
-            var op = rooms[msg.username] && rooms[msg.username].opacity;
-            if (op !== undefined) socket.send(JSON.stringify({ type: "opacity", value: op }));
+            const r = rooms[key];
+            socket.send(JSON.stringify({ type: "sync", top3: getTop3(key) }));
+            if (r && r.opacity !== undefined) socket.send(JSON.stringify({ type: "opacity", value: r.opacity }));
           }
         }, 300);
-        console.log("Panel rejoint: @" + msg.username);
+        console.log("Panel rejoint: @" + msg.username + " [" + period + "]");
       }
+
       if (msg.type === "reset" && msg.secret === ADMIN_SECRET && msg.username) {
-        await resetRoom(msg.username);
+        const key = roomKey(msg.username, msg.period || "month");
+        await resetRoom(key);
       }
+
       if (msg.type === "opacity" && msg.secret === ADMIN_SECRET && msg.username) {
-        if (!rooms[msg.username]) rooms[msg.username] = { donations: {}, avatars: {}, tiktok: null };
-        rooms[msg.username].opacity = msg.value;
-        broadcastRoom(msg.username, { type: "opacity", value: msg.value });
-        console.log("Opacité @" + msg.username + " => " + msg.value);
+        const key = roomKey(msg.username, msg.period || "month");
+        if (!rooms[key]) rooms[key] = { donations: {}, avatars: {}, opacity: msg.value, tiktok: null };
+        rooms[key].opacity = msg.value;
+        await saveRoom(key);
+        broadcastKey(key, { type: "opacity", value: msg.value });
+        console.log("Opacité [" + key + "] => " + msg.value);
       }
+
     } catch(e) {}
   });
   socket.on("error", () => {});
 });
 
+// ── TikTok — broadcast vers TOUTES les rooms de cet username
 function connectTikTok(username) {
-  const r = rooms[username];
-  if (!r) return;
   const tiktok = new WebcastPushConnection(username, {
     processInitialData    : false,
     enableExtendedGiftInfo: true,
     enableWebsocketUpgrade: true,
     requestPollingIntervalMs: 2000,
   });
-  r.tiktok = tiktok;
+
   tiktok.connect()
-    .then(() => { console.log("Connecte @" + username); broadcastRoom(username, { type: "status", online: true }); })
-    .catch(err => { console.log("Erreur @" + username + ": " + err.message + " — retry 30s"); setTimeout(() => connectTikTok(username), 30000); });
+    .then(() => {
+      console.log("Connecte @" + username);
+      Object.keys(rooms).forEach(function(k) {
+        if (k.split(":")[1] === username) broadcastKey(k, { type: "status", online: true });
+      });
+    })
+    .catch(err => {
+      console.log("Erreur @" + username + ": " + err.message + " — retry 30s");
+      setTimeout(() => connectTikTok(username), 30000);
+    });
+
   tiktok.on("gift", async data => {
     if (data.giftType === 1 && !data.repeatEnd) return;
     const pseudo = data.uniqueId || "anonyme";
     const coins  = (data.diamondCount || 1) * (data.repeatCount || 1);
-    r.donations[pseudo] = (r.donations[pseudo] || 0) + coins;
-    if (data.profilePictureUrl && !r.avatars[pseudo]) r.avatars[pseudo] = data.profilePictureUrl;
+
+    // Mettre à jour TOUTES les rooms de cet username (month + week)
+    for (var key of Object.keys(rooms)) {
+      if (key.split(":")[1] !== username) continue;
+      const r = rooms[key];
+      r.donations[pseudo] = (r.donations[pseudo] || 0) + coins;
+      if (data.profilePictureUrl && !r.avatars[pseudo]) r.avatars[pseudo] = data.profilePictureUrl;
+      await saveRoom(key);
+      broadcastKey(key, {
+        type : "gift",
+        donor: { name: pseudo, coins: r.donations[pseudo], avatar: r.avatars[pseudo] || null },
+        top3 : getTop3(key),
+      });
+    }
     console.log("[@" + username + "] " + pseudo + " +" + coins);
-    await saveRoom(username);
-    broadcastRoom(username, {
-      type : "gift",
-      donor: { name: pseudo, coins: r.donations[pseudo], avatar: r.avatars[pseudo] || null },
-      top3 : getTop3(username),
-    });
   });
-  tiktok.on("disconnected", () => { console.log("Deconnecte @" + username + " retry 15s"); setTimeout(() => connectTikTok(username), 15000); });
+
+  tiktok.on("disconnected", () => {
+    console.log("Deconnecte @" + username + " retry 15s");
+    setTimeout(() => connectTikTok(username), 15000);
+  });
+
   tiktok.on("error", err => { console.log("[@" + username + "] " + err.message); });
 }
