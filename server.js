@@ -1,15 +1,12 @@
 const http = require("http");
-const fs   = require("fs");
-const path = require("path");
 const { WebcastPushConnection } = require("tiktok-live-connector");
 const WebSocket = require("ws");
 
-const PORT         = process.env.PORT         || 3001;
+const PORT         = process.env.PORT         || 3000;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "admin123";
 const REDIS_URL    = process.env.UPSTASH_REDIS_REST_URL   || "https://lenient-leopard-36946.upstash.io";
 const REDIS_TOKEN  = process.env.UPSTASH_REDIS_REST_TOKEN || "AZBSAAIncDE3MjZjOThhMTI2ZDY0NjE4YTVjMTI5NjQ1OWYwZjdjMHAxMzY5NDY";
 
-// ── Redis ─────────────────────────────────────────────────────
 async function redisGet(key) {
   try {
     const r = await fetch(REDIS_URL + "/pipeline", {
@@ -49,42 +46,19 @@ async function redisDel(key) {
   } catch(e) { console.log("Redis DEL error: " + e.message); }
 }
 
-// ── Serveur HTTP — sert les fichiers HTML + WebSocket ─────────
 const httpServer = http.createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-
-  const url = req.url.split("?")[0];
-
-  if (url === "/" || url === "/index.html") {
-    serveFile(res, path.join(__dirname, "index.html"), "text/html");
-  } else if (url === "/admin" || url === "/admin.html") {
-    serveFile(res, path.join(__dirname, "admin.html"), "text/html");
-  } else {
-    res.writeHead(200, { "Content-Type": "text/plain" });
-    res.end("TikTok Multi-Panel OK");
-  }
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("TikTok Multi-Panel OK");
 });
-
-function serveFile(res, filePath, contentType) {
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(404); res.end("File not found");
-    } else {
-      res.writeHead(200, { "Content-Type": contentType + "; charset=utf-8" });
-      res.end(data);
-    }
-  });
-}
 
 const wss = new WebSocket.Server({ server: httpServer });
 
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log("Serveur actif port " + PORT);
-  console.log("Panel: http://188.40.251.75:" + PORT);
-  console.log("Admin: http://188.40.251.75:" + PORT + "/admin");
 });
 
-// ── Rooms ─────────────────────────────────────────────────────
+// ── Rooms — clé = "period:username" ex: "month:trycom9.3" ou "week:trycom9.3"
 const rooms = {};
 
 function roomKey(username, period) {
@@ -92,11 +66,7 @@ function roomKey(username, period) {
 }
 
 async function getRoom(key, username) {
-  if (rooms[key]) {
-    // Room existe mais TikTok peut ne pas être connecté
-    if (!rooms[key].tiktok) connectTikTok(username);
-    return rooms[key];
-  }
+  if (rooms[key]) return rooms[key];
   rooms[key] = { donations: {}, avatars: {}, opacity: 0.45, tiktok: null };
   try {
     const saved = await redisGet("room:" + key);
@@ -107,7 +77,11 @@ async function getRoom(key, username) {
       console.log("Redis chargé [" + key + "] — " + Object.keys(saved.donations).length + " joueurs");
     }
   } catch(e) { console.log("Erreur Redis [" + key + "]: " + e.message); }
-  connectTikTok(username);
+  // Connecter TikTok seulement si pas déjà connecté pour cet username
+  var alreadyConnected = Object.keys(rooms).some(function(k) {
+    return k !== key && k.split(":")[1] === username && rooms[k].tiktok && rooms[k].tiktok._isConnected;
+  });
+  if (!alreadyConnected) connectTikTok(username);
   return rooms[key];
 }
 
@@ -146,6 +120,7 @@ wss.on("connection", socket => {
   socket.on("message", async raw => {
     try {
       const msg = JSON.parse(raw);
+
       if (msg.type === "join" && msg.username) {
         const period = msg.period || "month";
         const key = roomKey(msg.username, period);
@@ -160,62 +135,44 @@ wss.on("connection", socket => {
         }, 300);
         console.log("Panel rejoint: @" + msg.username + " [" + period + "]");
       }
+
       if (msg.type === "reset" && msg.secret === ADMIN_SECRET && msg.username) {
         const key = roomKey(msg.username, msg.period || "month");
         await resetRoom(key);
       }
+
       if (msg.type === "opacity" && msg.secret === ADMIN_SECRET && msg.username) {
         const key = roomKey(msg.username, msg.period || "month");
         if (!rooms[key]) rooms[key] = { donations: {}, avatars: {}, opacity: msg.value, tiktok: null };
         rooms[key].opacity = msg.value;
         await saveRoom(key);
         broadcastKey(key, { type: "opacity", value: msg.value });
+        console.log("Opacité [" + key + "] => " + msg.value);
       }
+
     } catch(e) {}
   });
   socket.on("error", () => {});
 });
 
-// ── TikTok ────────────────────────────────────────────────────
+// ── TikTok — broadcast vers TOUTES les rooms de cet username
 function connectTikTok(username) {
-  for (var k of Object.keys(rooms)) {
-    if (k.split(":")[1] === username && rooms[k].tiktok && rooms[k].tiktok._isConnecting) {
-      console.log("TikTok deja en connexion pour @" + username);
-      return;
-    }
-  }
-
   const tiktok = new WebcastPushConnection(username, {
     processInitialData    : false,
     enableExtendedGiftInfo: true,
     enableWebsocketUpgrade: true,
     requestPollingIntervalMs: 2000,
-    sessionId: process.env.TIKTOK_SESSION_ID || "",
-    requestHeaders: {
-      Cookie: "sessionid=" + (process.env.TIKTOK_SESSION_ID || "") + "; tt_chain_token=" + (process.env.TIKTOK_TT_CHAIN || "") + "; msToken=" + (process.env.TIKTOK_MS_TOKEN || "")
-    }
   });
-
-  tiktok._isConnecting = true;
-
-  for (var key2 of Object.keys(rooms)) {
-    if (key2.split(":")[1] === username) rooms[key2].tiktok = tiktok;
-  }
 
   tiktok.connect()
     .then(() => {
-      tiktok._isConnecting = false;
       console.log("Connecte @" + username);
       Object.keys(rooms).forEach(function(k) {
         if (k.split(":")[1] === username) broadcastKey(k, { type: "status", online: true });
       });
     })
     .catch(err => {
-      tiktok._isConnecting = false;
       console.log("Erreur @" + username + ": " + err.message + " — retry 30s");
-      for (var key3 of Object.keys(rooms)) {
-        if (key3.split(":")[1] === username) rooms[key3].tiktok = null;
-      }
       setTimeout(() => connectTikTok(username), 30000);
     });
 
@@ -223,6 +180,8 @@ function connectTikTok(username) {
     if (data.giftType === 1 && !data.repeatEnd) return;
     const pseudo = data.uniqueId || "anonyme";
     const coins  = (data.diamondCount || 1) * (data.repeatCount || 1);
+
+    // Mettre à jour TOUTES les rooms de cet username (month + week)
     for (var key of Object.keys(rooms)) {
       if (key.split(":")[1] !== username) continue;
       const r = rooms[key];
@@ -240,12 +199,8 @@ function connectTikTok(username) {
 
   tiktok.on("disconnected", () => {
     console.log("Deconnecte @" + username + " retry 15s");
-    for (var key4 of Object.keys(rooms)) {
-      if (key4.split(":")[1] === username) rooms[key4].tiktok = null;
-    }
     setTimeout(() => connectTikTok(username), 15000);
   });
 
   tiktok.on("error", err => { console.log("[@" + username + "] " + err.message); });
 }
-
